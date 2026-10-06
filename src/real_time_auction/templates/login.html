@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sanctum Admin — Authenticate</title>
+    <style>
+        :root {
+            --sanctum-bg: #0C0805;
+            --sanctum-panel-bg: rgba(20, 14, 9, 0.95);
+            --sanctum-header-bg: #5A0D0D;
+            --sanctum-brass: #C5A059;
+            --sanctum-gold: #E2B755;
+            --sanctum-parchment: #F3E5AB;
+            --sanctum-muted: #A08A75;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: "Cinzel", "Times New Roman", serif, Georgia;
+            background-color: var(--sanctum-bg);
+            color: var(--sanctum-parchment);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .login-box {
+            width: 100%;
+            max-width: 420px;
+            background-color: var(--sanctum-panel-bg);
+            border: 1px solid var(--sanctum-brass);
+            box-shadow: 0 0 35px rgba(0, 0, 0, 0.95), 0 0 15px rgba(197, 160, 89, 0.2);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .login-header {
+            background-color: var(--sanctum-header-bg);
+            padding: 20px;
+            text-align: center;
+            border-bottom: 2px solid var(--sanctum-brass);
+        }
+
+        .login-header h1 {
+            font-size: 16px;
+            color: var(--sanctum-gold);
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .login-header p {
+            font-size: 10px;
+            color: var(--sanctum-parchment);
+            letter-spacing: 1px;
+            margin-top: 4px;
+        }
+
+        .login-body {
+            padding: 28px 24px;
+        }
+
+        .error-banner {
+            background-color: rgba(139, 0, 0, 0.3);
+            border: 1px solid #8B0000;
+            color: #ff9999;
+            padding: 10px;
+            font-size: 11px;
+            margin-bottom: 20px;
+            text-align: center;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 10px;
+            color: var(--sanctum-muted);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            font-weight: bold;
+            margin-bottom: 6px;
+        }
+
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            background-color: rgba(12, 8, 5, 0.9);
+            border: 1px solid var(--sanctum-brass);
+            color: var(--sanctum-parchment);
+            font-size: 13px;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: var(--sanctum-gold);
+        }
+
+        .btn-login {
+            width: 100%;
+            background-color: var(--sanctum-header-bg);
+            color: var(--sanctum-parchment);
+            border: 1px solid var(--sanctum-brass);
+            padding: 12px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-login:hover {
+            background-color: #701010;
+            color: var(--sanctum-gold);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-box">
+        <div class="login-header">
+            <h1>Sanctum Ledger</h1>
+            <p>ADMINISTRATIVE ENTRY PORTAL</p>
+        </div>
+        <div class="login-body">
+            {% if error %}
+                <div class="error-banner">{{ error }}</div>
+            {% endif %}
+
+            <form action="/admin/login" method="POST">
+                <div class="form-group">
+                    <label>Admin Identity (Email)</label>
+                    <input type="email" name="username" required placeholder="admin@sanctum.com" autofocus>
+                </div>
+
+                <div class="form-group">
+                    <label>Cipher Key (Password)</label>
+                    <input type="password" name="password" required placeholder="••••••••">
+                </div>
+
+                <button type="submit" class="btn-login">Authenticate</button>
+            </form>
+        </div>
+    </div>
+
+</body>
+</html>

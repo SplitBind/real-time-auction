@@ -1,0 +1,147 @@
+{% extends "base_admin.html" %}
+
+{% block nav_dash %}active{% endblock %}
+
+{% block content %}
+<!-- Metric Bar -->
+<div class="summary-bar">
+    <div class="summary-box">
+        <div class="title">Active Live Lots</div>
+        <div class="value">{{ total_active }}</div>
+    </div>
+    <div class="summary-box">
+        <div class="title">Total Bids Processed</div>
+        <div class="value">{{ total_bids }}</div>
+    </div>
+    <div class="summary-box">
+        <div class="title">Registered Lots</div>
+        <div class="value">{{ total_items }}</div>
+    </div>
+    <div class="summary-box">
+        <div class="title">Pending Verification</div>
+        <div class="value">{{ verification_queue|length }}</div>
+    </div>
+</div>
+
+<div class="two-column">
+    <!-- Left Column: Active Auctions & Process Verification -->
+    <div>
+        <div class="panel">
+            <div class="panel-header">
+                <span>Active Lot Control Grid</span>
+                <a href="/admin/items/add" class="btn">+ New Lot</a>
+            </div>
+            <div class="panel-body">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Lot ID</th>
+                            <th>Title</th>
+                            <th>Current Price</th>
+                            <th>End Time</th>
+                            <th>Status</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in active_items %}
+                        <tr>
+                            <td><strong style="color: var(--sanctum-gold);">#{{ item.id }}</strong></td>
+                            <td style="color: var(--sanctum-parchment);">{{ item.title }}</td>
+                            <td style="color: var(--sanctum-gold); font-weight: bold;">
+                                ${{ "%.2f"|format(item.current_price) }}
+                            </td>
+                            <td style="color: var(--sanctum-muted); font-size: 11px;">
+                                {{ item.end_time.strftime('%Y-%m-%d %H:%M') }}
+                            </td>
+                            <td><span class="badge badge-active">LIVE</span></td>
+                            <td>
+                                <form action="/admin/items/{{ item.id }}/toggle-status" method="POST" style="display:inline;">
+                                    <button type="submit" class="btn">Close Lot</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: var(--sanctum-muted);">No active lots found in ledger.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Verification Queue -->
+        <div class="panel">
+            <div class="panel-header">Process Verification Queue</div>
+            <div class="panel-body">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Lot ID</th>
+                            <th>Title</th>
+                            <th>Final Bid</th>
+                            <th>Bids Count</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lot in verification_queue %}
+                        <tr>
+                            <td>#{{ lot.id }}</td>
+                            <td>{{ lot.title }}</td>
+                            <td style="color: var(--sanctum-gold); font-weight: bold;">${{ "%.2f"|format(lot.current_price) }}</td>
+                            <td>{{ lot.bids|length }}</td>
+                            <td>
+                                <a href="/admin/email" class="btn">Dispatch Notice</a>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: var(--sanctum-muted);">No closed lots pending verification.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Right Column: Audit Log Stream -->
+    <div>
+        <div class="panel">
+            <div class="panel-header">Real-Time Bid Audit Trail</div>
+            <div class="panel-body">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Bidder</th>
+                            <th>Lot</th>
+                            <th>Amount</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bid in recent_bids %}
+                        <tr>
+                            <td style="color: var(--sanctum-muted); font-size: 11px;">
+                                {{ bid.user.email if bid.user else 'User #' ~ bid.user_id }}
+                            </td>
+                            <td>#{{ bid.item_id }}</td>
+                            <td style="color: var(--sanctum-gold); font-weight: bold;">${{ "%.2f"|format(bid.amount) }}</td>
+                            <td style="color: var(--sanctum-muted); font-size: 11px;">
+                                {{ bid.created_at.strftime('%H:%M:%S') }}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4" style="text-align: center; color: var(--sanctum-muted);">No bids recorded yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

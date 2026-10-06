@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Sanctum Admin Portal{% endblock %}</title>
+    <style>
+        :root {
+            --sanctum-bg: #0C0805;
+            --sanctum-panel-bg: rgba(20, 14, 9, 0.95);
+            --sanctum-header-bg: #5A0D0D;
+            --sanctum-header-border: #8B0000;
+            --sanctum-nav-bg: #140E09;
+            --sanctum-nav-hover: #221710;
+            --sanctum-brass: #C5A059;
+            --sanctum-gold: #E2B755;
+            --sanctum-parchment: #F3E5AB;
+            --sanctum-muted: #A08A75;
+            --sanctum-card-header: #1A120B;
+            --sanctum-card-border: rgba(197, 160, 89, 0.35);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: "Cinzel", "Times New Roman", serif, Georgia;
+            background-color: var(--sanctum-bg);
+            color: var(--sanctum-parchment);
+            font-size: 13px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center; /* Horizontally center the layout */
+            align-items: flex-start;
+            padding: 30px 16px;
+        }
+
+        /* Unified Outer Centered Wrapper */
+        .sanctum-wrapper {
+            width: 100%;
+            max-width: 1100px; /* Constrains header, nav, and body together */
+            margin: 0 auto;
+        }
+
+        /* Combined Outer Frame with Gold/Brass Border */
+        .sanctum-frame {
+            background-color: var(--sanctum-panel-bg);
+            border: 1px solid var(--sanctum-brass);
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.8), 0 0 10px rgba(197, 160, 89, 0.15); /* Fixed typo here */
+            border-radius: 4px;
+            overflow: hidden; /* Ensures header corners stay within the frame radius */
+        }
+
+        /* Top Header */
+        .top-bar {
+            background-color: var(--sanctum-header-bg);
+            color: var(--sanctum-parchment);
+            padding: 14px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid var(--sanctum-brass);
+        }
+        .brand-title {
+            font-size: 18px;
+            font-weight: bold;
+            letter-spacing: 2px;
+            color: var(--sanctum-gold);
+            text-transform: uppercase;
+        }
+        .brand-sub {
+            font-size: 10px;
+            color: var(--sanctum-parchment);
+            letter-spacing: 1px;
+        }
+
+        /* Horizontal Menu Bar */
+        .nav-bar {
+            background-color: var(--sanctum-nav-bg);
+            display: flex;
+            padding: 0 10px;
+            border-bottom: 1px solid var(--sanctum-card-border);
+        }
+        .nav-bar a {
+            color: var(--sanctum-muted);
+            text-decoration: none;
+            padding: 10px 18px;
+            font-size: 11px;
+            font-weight: bold;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            border-right: 1px solid rgba(197, 160, 89, 0.15);
+            transition: all 0.2s;
+        }
+        .nav-bar a:hover, .nav-bar a.active {
+            background-color: var(--sanctum-nav-hover);
+            color: var(--sanctum-gold);
+        }
+
+        /* Main Body Content Inner Padding */
+        .container {
+            padding: 24px;
+        }
+
+        /* Metric Cards */
+        .summary-bar {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .summary-box {
+            background: var(--sanctum-panel-bg);
+            border: 1px solid var(--sanctum-card-border);
+            padding: 12px;
+            border-top: 3px solid var(--sanctum-brass);
+        }
+        .summary-box .title {
+            font-size: 10px;
+            color: var(--sanctum-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: bold;
+        }
+        .summary-box .value {
+            font-size: 22px;
+            font-weight: bold;
+            color: var(--sanctum-gold);
+            margin-top: 4px;
+        }
+
+        /* Panels & Cards */
+        .panel {
+            background: var(--sanctum-panel-bg);
+            border: 1px solid var(--sanctum-card-border);
+            margin-bottom: 20px;
+        }
+        .panel-header {
+            background-color: var(--sanctum-card-header);
+            padding: 10px 14px;
+            font-weight: bold;
+            font-size: 11px;
+            color: var(--sanctum-gold);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            border-bottom: 1px solid var(--sanctum-card-border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .panel-body { padding: 14px; }
+
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+        th, td {
+            border: 1px solid var(--sanctum-card-border);
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: var(--sanctum-card-header);
+            color: var(--sanctum-muted);
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        tr:nth-child(even) {
+            background-color: rgba(255, 255, 255, 0.02);
+        }
+
+        /* Buttons */
+        .btn {
+            background-color: var(--sanctum-header-bg);
+            color: var(--sanctum-parchment);
+            border: 1px solid var(--sanctum-brass);
+            padding: 6px 14px;
+            font-size: 10px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn:hover {
+            background-color: var(--sanctum-header-border);
+            color: var(--sanctum-gold);
+        }
+
+        .badge {
+            padding: 2px 6px;
+            font-size: 9px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            border-radius: 2px;
+        }
+        .badge-active { background-color: var(--sanctum-header-bg); color: var(--sanctum-parchment); border: 1px solid var(--sanctum-brass); }
+        .badge-closed { background-color: #333; color: var(--sanctum-muted); border: 1px solid #555; }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 3fr 2fr;
+            gap: 20px;
+        }
+
+        /* Form Grid */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px 20px;
+        }
+        .form-group {
+            display: flex;
+            align-items: center;
+        }
+        .form-group label {
+            width: 35%;
+            font-weight: bold;
+            color: var(--sanctum-muted);
+            font-size: 11px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 65%;
+            padding: 8px 10px;
+            border: 1px solid var(--sanctum-brass);
+            background-color: rgba(12, 8, 5, 0.9);
+            color: var(--sanctum-parchment);
+            font-size: 12px;
+        }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: var(--sanctum-gold);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Unified Centered Sanctum Layout -->
+    <div class="sanctum-wrapper">
+        <div class="sanctum-frame">
+            
+            <!-- Top Crimson Header Bar -->
+            <div class="top-bar">
+                <div>
+                    <div class="brand-title">Sanctum Admin Portal</div>
+                    <div class="brand-sub">HIGH-STAKES AUCTION CONTROL ENGINE</div>
+                </div>
+                <div>
+                    <a href="/admin/logout" class="btn">Depart Sanctum</a>
+                </div>
+            </div>
+
+            <!-- Navigation Bar -->
+            <div class="nav-bar">
+                <a href="/admin/dashboard" class="{% block nav_dash %}{% endblock %}">Dashboard Ledger</a>
+                <a href="/admin/items/add" class="{% block nav_add %}{% endblock %}">Register Auction Lot</a>
+                <a href="/admin/email" class="{% block nav_email %}{% endblock %}">Notification Center</a>
+            </div>
+
+            <!-- Page Block Content -->
+            <div class="container">
+                {% block content %}{% endblock %}
+            </div>
+
+        </div>
+    </div>
+
+</body>
+</html>

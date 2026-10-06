@@ -1,0 +1,33 @@
+{% extends "base_admin.html" %}
+
+{% block nav_email %}active{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 700px; margin: 0 auto;">
+    <div class="panel-header">Dispatch System Notice / Email</div>
+    <div class="panel-body">
+        <form action="/admin/email/send" method="POST">
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+                <div class="form-group" style="width: 100%;">
+                    <label>Recipient Email</label>
+                    <input type="email" name="recipient_email" required placeholder="user@example.com">
+                </div>
+
+                <div class="form-group" style="width: 100%;">
+                    <label>Subject</label>
+                    <input type="text" name="subject" required placeholder="Lot Settlement Notice">
+                </div>
+
+                <div class="form-group" style="width: 100%; align-items: flex-start;">
+                    <label style="margin-top: 8px;">Message</label>
+                    <textarea name="message" rows="6" required placeholder="Official notification details..."></textarea>
+                </div>
+
+                <div style="text-align: right; margin-top: 10px;">
+                    <button type="submit" class="btn" style="padding: 10px 24px;">Send Dispatch</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
