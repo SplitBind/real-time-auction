@@ -1,12 +1,15 @@
+import uuid
+import json
+import aiofiles
 from typing import Optional
 from decimal import Decimal
 from datetime import datetime, timezone
 from pathlib import Path
 from fastapi.templating import Jinja2Templates
-from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi import APIRouter,HTTPException ,Depends, File,Form, Request, status, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_, desc, asc
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,10 +19,13 @@ from real_time_auction.database import get_db
 from real_time_auction.models.user import User
 from real_time_auction.models.item import AuctionItem
 from real_time_auction.models.bid import Bid
+from real_time_auction.core.websockets import ws_manager
 
 router = APIRouter(prefix="/admin", tags=["Sanctum Admin Portal"])
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+UPLOAD_DIR = Path("static/uploads")
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # --- AUTHENTICATION ENDPOINTS ---
 @router.get("/login", response_class=HTMLResponse)
@@ -150,35 +156,32 @@ async def render_add_item_page(
 
 @router.post("/items/add")
 async def handle_add_item(
-    request: Request,
     title: str = Form(...),
-    description: str = Form(...),
-    starting_price: Decimal = Form(...),
-    reserve_price: Decimal = Form(...),
-    min_increment: Decimal = Form(...),
+    description: str = Form(""),
+    starting_price: float = Form(...),
+    reserve_price: Optional[float] = Form(None),
+    min_increment: float = Form(5.00),
     start_time: datetime = Form(...),
     end_time: datetime = Form(...),
-    image_url: Optional[str] = Form(None),
+    image: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
-    current_admin: User = Depends(get_current_admin_user_html),
 ):
-    """Process auction lot creation with local imafe file upload."""
-    saved_image_url: Optional[str] = None
+    # 1. Initialize image URL variable
+    saved_image_url = None
 
+    # 2. Process image upload if provided
     if image and image.filename:
-        """Extract extension and generate a non-collinding UUID filename"""
-        ext=Path(image.filename).suffix or ".jpg"
-        unique_filename=f"{uuid.uuid4().hex}{ext}"
-        file_path = UPLOAD_DIR / unique_filename
+        file_ext = image.filename.split(".")[-1]
+        unique_filename = f"{uuid.uuid4().hex}.{file_ext}"
+        destination = UPLOAD_DIR / unique_filename
 
-        contents = await image.read()
-        with open(file_path, "wb") as f:
-            f.write(contents)
+        async with aiofiles.open(destination, "wb") as buffer:
+            content = await image.read()
+            await buffer.write(content)
 
-        # Set DB path matching existing lot format
         saved_image_url = f"/static/uploads/{unique_filename}"
-    
-    """Process auction lot creation form submission."""
+
+    # 3. Pass saved_image_url to the model
     new_item = AuctionItem(
         title=title,
         description=description,
@@ -188,18 +191,75 @@ async def handle_add_item(
         min_increment=min_increment,
         start_time=start_time,
         end_time=end_time,
-        image_url=saved_image_url,
-        is_active=True,
+        image_url=saved_image_url,  # Matching variable name
     )
 
     db.add(new_item)
     await db.commit()
 
-    # Redirect back to the admin dashboard on successful creation
-    return RedirectResponse(
-        url="/admin/dashboard", 
-        status_code=status.HTTP_303_SEE_OTHER
+    return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+
+@router.post("/items/{item_id}/close")
+async def close_auction_lot(
+    item_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """Closes an active auction lot, evaluates winner/reserve, and broadcasts status."""
+    now = datetime.now(timezone.utc)
+
+    # 1. Fetch item with row lock to prevent race conditions
+    stmt = select(AuctionItem).where(AuctionItem.id == item_id).with_for_update()
+    result = await db.execute(stmt)
+    item = result.scalar_one_or_none()
+
+    if not item:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Auction item not found",
+        )
+
+    if not item.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This lot is already closed.",
+        )
+
+    # 2. Get highest bid
+    bid_stmt = (
+        select(Bid)
+        .where(Bid.item_id == item_id)
+        .order_by(Bid.amount.desc())
+        .limit(1)
     )
+    bid_result = await db.execute(bid_stmt)
+    winning_bid = bid_result.scalar_one_or_none()
+
+    # 3. Determine outcome
+    reserve_met = True
+    if item.reserve_price and item.current_price < item.reserve_price:
+        reserve_met = False
+
+    is_sold = bool(winning_bid and reserve_met)
+
+    # 4. Update item status in database
+    item.is_active = False
+    item.end_time = now
+
+    await db.commit()
+    await db.refresh(item)
+
+    # 5. Broadcast auction status to WebSocket listeners
+    await ws_manager.broadcast_auction_closed(
+        item_id=item.id,
+        is_sold=is_sold,
+        winning_bid_id=winning_bid.id if winning_bid else None,
+        winning_user_id=winning_bid.user_id if winning_bid else None,
+        final_price=float(item.current_price),
+    )
+    if not item.is_active:
+        return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
+
+    return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
 @router.get("/email", response_class=HTMLResponse)
 async def render_email_page(
@@ -207,3 +267,34 @@ async def render_email_page(
     current_admin: User = Depends(get_current_admin_user_html),
 ):
     return templates.TemplateResponse(request=request, name="send_email.html")
+
+@router.get("/auctions", response_class=HTMLResponse)
+async def list_admin_auctions(request: Request, db: AsyncSession = Depends(get_db)):
+    # Fetch all items from DB in a single query
+    stmt = select(AuctionItem).order_by(AuctionItem.created_at.desc())
+    result = await db.execute(stmt)
+    raw_auctions = result.scalars().all()
+
+    # Serialize objects into a JS-friendly JSON structure
+    auctions_json = json.dumps([
+        {
+            "id": item.id,
+            "title": item.title,
+            "description": item.description or "",
+            "current_price": float(item.current_price),
+            "is_active": item.is_active,
+            "end_time": item.end_time.strftime('%Y-%m-%d %H:%M') if item.end_time else 'N/A',
+            "created_at": item.created_at.isoformat() if item.created_at else ''
+        }
+        for item in raw_auctions
+    ])
+
+    return templates.TemplateResponse(
+        request=request,
+        name="admin_auctions_filter.html",
+        context={
+            "auctions_json": auctions_json,
+            "total_count": len(raw_auctions),
+        }
+    )
+

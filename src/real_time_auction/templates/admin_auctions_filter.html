@@ -1,0 +1,178 @@
+{% extends "base_admin.html" %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <h2>Auction Ledger Control</h2>
+        <span id="record-count" class="badge">Loading records...</span>
+    </div>
+
+    <div class="card-body">
+        <!-- Client-Side Filter Controls -->
+<div style="display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px;">
+    <input type="text" 
+           id="search-input" 
+           placeholder="Search title or keyword..." 
+           style="padding: 8px 12px; flex: 1; min-width: 200px; background-color: #12121e; color: #d1d1e0; border: 1px solid #2b2b40; border-radius: 4px; outline: none;">
+
+    <select id="status-select" style="padding: 8px 12px; background-color: #12121e; color: #d1d1e0; border: 1px solid #2b2b40; border-radius: 4px; outline: none;">
+        <option value="all">All Statuses</option>
+        <option value="active">Active Only</option>
+        <option value="closed">Closed Only</option>
+    </select>
+
+    <input type="number" 
+           id="min-price" 
+           placeholder="Min Price" 
+           style="padding: 8px 12px; width: 120px; background-color: #12121e; color: #d1d1e0; border: 1px solid #2b2b40; border-radius: 4px; outline: none;">
+
+    <input type="number" 
+           id="max-price" 
+           placeholder="Max Price" 
+           style="padding: 8px 12px; width: 120px; background-color: #12121e; color: #d1d1e0; border: 1px solid #2b2b40; border-radius: 4px; outline: none;">
+
+    <select id="sort-select" style="padding: 8px 12px; background-color: #12121e; color: #d1d1e0; border: 1px solid #2b2b40; border-radius: 4px; outline: none;">
+        <option value="newest">Newest First</option>
+        <option value="oldest">Oldest First</option>
+        <option value="price_high">Price: High to Low</option>
+        <option value="price_low">Price: Low to High</option>
+    </select>
+
+    <button type="button" id="reset-btn" class="btn btn-secondary" style="padding: 8px 16px; background-color: #2b2b40; color: #d1d1e0; border: 1px solid #32324e; border-radius: 4px; cursor: pointer;">Reset</button>
+</div>
+        <!-- Dynamic Results Table -->
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Current Price</th>
+                    <th>Status</th>
+                    <th>End Time</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="auctions-table-body">
+                <!-- Javascript injects filtered rows here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// 1. Hydrate raw data directly from Jinja context into JS memory
+const ALL_AUCTIONS = {{ auctions_json | safe }};
+
+// 2. DOM Elements
+const searchInput = document.getElementById('search-input');
+const statusSelect = document.getElementById('status-select');
+const minPriceInput = document.getElementById('min-price');
+const maxPriceInput = document.getElementById('max-price');
+const sortSelect = document.getElementById('sort-select');
+const tableBody = document.getElementById('auctions-table-body');
+const recordCount = document.getElementById('record-count');
+const resetBtn = document.getElementById('reset-btn');
+
+// 3. Filter & Sort Engine
+function applyFilters() {
+    const searchTerm = searchInput.value.trim().toLowerCase();
+    const statusVal = statusSelect.value;
+    const minPrice = parseFloat(minPriceInput.value) || 0;
+    const maxPrice = parseFloat(maxPriceInput.value) || Infinity;
+    const sortBy = sortSelect.value;
+
+    // Filter in-memory array
+    let filtered = ALL_AUCTIONS.filter(item => {
+        // Keyword Search (matches title or description)
+        const matchesSearch = !searchTerm || 
+            item.title.toLowerCase().includes(searchTerm) || 
+            item.description.toLowerCase().includes(searchTerm);
+
+        // Status Match
+        const matchesStatus = 
+            statusVal === 'all' || 
+            (statusVal === 'active' && item.is_active) || 
+            (statusVal === 'closed' && !item.is_active);
+
+        // Price Range
+        const matchesPrice = item.current_price >= minPrice && item.current_price <= maxPrice;
+
+        return matchesSearch && matchesStatus && matchesPrice;
+    });
+
+    // Sort in-memory array
+    filtered.sort((a, b) => {
+        if (sortBy === 'oldest') return new Date(a.created_at) - new Date(b.created_at);
+        if (sortBy === 'price_high') return b.current_price - a.current_price;
+        if (sortBy === 'price_low') return a.current_price - b.current_price;
+        return new Date(b.created_at) - new Date(a.created_at); // default: newest
+    });
+
+    renderTable(filtered);
+}
+
+// 4. DOM Renderer
+function renderTable(items) {
+    recordCount.textContent = `${items.length} of ${ALL_AUCTIONS.length} items`;
+
+    if (items.length === 0) {
+        tableBody.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; color: #8a8a9e; padding: 20px;">
+                    No auctions match your filter criteria.
+                </td>
+            </tr>`;
+        return;
+    }
+
+    tableBody.innerHTML = items.map(item => `
+        <tr>
+            <td>#${item.id}</td>
+            <td><strong>${escapeHtml(item.title)}</strong></td>
+            <td>$${item.current_price.toFixed(2)}</td>
+            <td>
+                ${item.is_active 
+                    ? '<span class="badge badge-live">LIVE</span>' 
+                    : '<span class="badge badge-closed">CLOSED</span>'}
+            </td>
+            <td>${item.end_time}</td>
+            <td>
+                ${item.is_active ? `
+                    <form action="/admin/items/${item.id}/close" method="POST" style="margin: 0; display: inline;">
+                        <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Close Lot #${item.id}?');">
+                            Close Lot
+                        </button>
+                    </form>` : '-'
+                }
+            </td>
+        </tr>
+    `).join('');
+}
+
+// Utility to prevent XSS output issues
+function escapeHtml(str) {
+    return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+    );
+}
+
+// 5. Attach Event Listeners
+searchInput.addEventListener('input', applyFilters);
+statusSelect.addEventListener('change', applyFilters);
+minPriceInput.addEventListener('input', applyFilters);
+maxPriceInput.addEventListener('input', applyFilters);
+sortSelect.addEventListener('change', applyFilters);
+
+resetBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    statusSelect.value = 'all';
+    minPriceInput.value = '';
+    maxPriceInput.value = '';
+    sortSelect.value = 'newest';
+    applyFilters();
+});
+
+// Initial Render on Load
+applyFilters();
+</script>
+{% endblock %}
