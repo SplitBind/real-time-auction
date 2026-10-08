@@ -1,7 +1,7 @@
 # app/schemas/bid.py
 from datetime import datetime
 from decimal import Decimal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from real_time_auction.schemas.user import UserResponse
 
 
@@ -9,7 +9,12 @@ from real_time_auction.schemas.user import UserResponse
 class BidCreate(BaseModel):
     amount: Decimal = Field(..., gt=0, decimal_places=2, description="Bid amount must be greater than 0")
 
-
+    @field_validator("amount")
+    def validate_max_bid(cls, value: Decimal) -> Decimal:
+        # Prevents numeric overflow before querying DB
+        if value >= Decimal("10000000000006"):
+            raise ValueError("Bid amount exceeds the maximum allowable limit.")
+        return value
 # Response: Individual Bid Details
 class BidResponse(BaseModel):
     id: int
