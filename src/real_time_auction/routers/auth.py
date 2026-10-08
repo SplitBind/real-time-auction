@@ -1,8 +1,8 @@
 # app/routers/auth.py
 from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from real_time_auction.config import settings
 from real_time_auction.core.security import get_password_hash, verify_password, create_access_token
@@ -14,9 +14,12 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
+async def register_user(user_in: UserCreate, db: AsyncSession = Depends(get_db)):
     """Register a new user account."""
-    existing_user = db.query(User).filter(User.email == user_in.email).first()
+    stmt = select(User).where(User.email == user_in.email)
+    result = await db.execute(stmt)
+    existing_user = result.scalar_one_or_none()
+
     if existing_user:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -29,13 +32,13 @@ def register_user(user_in: UserCreate, db: Session = Depends(get_db)):
         is_admin=False
     )
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    await db.commit()
+    await db.refresh(new_user)
     return new_user
 
 
 @router.post("/login", response_model=Token)
-async def login(user_credentials: UserLogin, db: Session = Depends(get_db)):
+async def login(user_credentials: UserLogin, db: AsyncSession = Depends(get_db)):
     """Authenticate user credentials and return a Bearer JWT token."""
     stmt = select(User).where(User.email == user_credentials.email)
     result = await db.execute(stmt)
