@@ -70,6 +70,6 @@ async def websocket_auction_endpoint(websocket: WebSocket, item_id: int):
 async def render_admin_dashboard(request: Request):
     return templates.TemplateResponse(
             request=request,
-            name="dashboard.html",
+            name="login.html",
             context={"title": "Sanctum Admin"}
             )
