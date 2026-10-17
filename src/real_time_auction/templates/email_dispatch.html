@@ -1,0 +1,118 @@
+{% extends "base_admin.html" %}
+
+{% block nav_email %}active{% endblock %}
+
+{% block content %}
+<div class="panel" style="max-width: 700px; margin: 0 auto;">
+    <div class="panel-header">Dispatch System Notice / Email & Attachments</div>
+    <div class="panel-body">
+        <form action="/api/v1/emails/send" method="POST" enctype="multipart/form-data">
+            <div style="display: flex; flex-direction: column; gap: 14px;">
+                
+                <!-- Template Preset Selector -->
+                <div class="form-group" style="width: 100%;">
+                    <label>Load Template Preset</label>
+                    <select id="templateSelector" onchange="applyTemplate()" style="width: 100%; padding: 8px 12px; background: rgba(0,0,0,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px;">
+                        <option value="custom">-- Custom Message --</option>
+                        <option value="settlement">Lot Settlement & Payment Notice</option>
+                        <option value="apk_release">New Mobile App Build (APK Dispatch)</option>
+                        <option value="verification">Account Verification Required</option>
+                    </select>
+                </div>
+
+                <!-- Recipient Selection Dropdown (Multi-select from Users Table) -->
+                <div class="form-group" style="width: 100%;">
+                    <label>Recipients (Select Users)</label>
+                    <select name="recipient_emails" multiple required style="width: 100%; height: 110px; padding: 8px; background: rgba(0,0,0,0.2); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px;">
+                        {% for user in all_users %}
+                        <option value="{{ user.email }}">{{ user.email }} (ID: #{{ user.id }})</option>
+                        {% else %}
+                        <option disabled>No users found in database ledger.</option>
+                        {% endfor %}
+                    </select>
+                    <span style="font-size: 11px; color: #8a99ad; margin-top: 2px;">Hold Ctrl / Cmd to select multiple recipients.</span>
+                </div>
+
+                <!-- Subject -->
+                <div class="form-group" style="width: 100%;">
+                    <label>Subject</label>
+                    <input type="text" name="subject" id="subject" required placeholder="Lot Settlement Notice">
+                </div>
+
+                <!-- File Attachment Input (APK or other formats) -->
+                <div class="form-group" style="width: 100%;">
+                    <label>Attachment File (Optional)</label>
+                    <input type="file" name="attachment" style="background: rgba(0,0,0,0.2); padding: 8px; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; color: #fff; width: 100%;">
+                    <span style="font-size: 11px; color: #8a99ad; margin-top: 2px;">Supported formats: .apk, .pdf, .zip, .docx</span>
+                </div>
+
+                <!-- Message -->
+                <div class="form-group" style="width: 100%; align-items: flex-start;">
+                    <label style="margin-top: 8px;">Message</label>
+                    <textarea name="message" id="message" rows="8" required placeholder="Official notification details..."></textarea>
+                </div>
+
+                <!-- Quick Variable Insertions -->
+                <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                    <span style="font-size: 12px; color: #8a99ad;">Insert Tag:</span>
+                    <button type="button" class="btn-tag" onclick="insertVariable('{{ user_name }}')">{{ '{{ user_name }}' }}</button>
+                    <button type="button" class="btn-tag" onclick="insertVariable('{{ lot_id }}')">{{ '{{ lot_id }}' }}</button>
+                    <button type="button" class="btn-tag" onclick="insertVariable('{{ download_link }}')">{{ '{{ download_link }}' }}</button>
+                </div>
+
+                <div style="text-align: right; margin-top: 10px;">
+                    <button type="submit" class="btn" style="padding: 10px 24px;">Send Dispatch</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+const templates = {
+    settlement: {
+        subject: "Action Required: Settlement Notice for Lot #{{ lot_id }}",
+        message: "Dear {{ user_name }},\n\nCongratulations! You have won the bidding for Lot #{{ lot_id }}.\nPlease complete your payment settlement using the ledger panel."
+    },
+    apk_release: {
+        subject: "New Auction App Build Available (.APK)",
+        message: "Dear {{ user_name }},\n\nA new secure update for our auction client has been attached to this notice. Please install the attached APK build to continue real-time bidding."
+    },
+    verification: {
+        subject: "Account Verification Clearance",
+        message: "Dear {{ user_name }},\n\nYour account credentials have been queued for ledger verification."
+    }
+};
+
+function applyTemplate() {
+    const key = document.getElementById('templateSelector').value;
+    if (templates[key]) {
+        document.getElementById('subject').value = templates[key].subject;
+        document.getElementById('message').value = templates[key].message;
+    }
+}
+
+function insertVariable(varName) {
+    const textarea = document.getElementById('message');
+    const start = textarea.selectionStart;
+    textarea.value = textarea.value.substring(0, start) + varName + textarea.value.substring(textarea.selectionEnd);
+    textarea.focus();
+}
+</script>
+
+<style>
+.btn-tag {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #00c8ff;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+    font-size: 11px;
+    cursor: pointer;
+}
+.btn-tag:hover {
+    background: rgba(0, 200, 255, 0.15);
+}
+</style>
+{% endblock %}
