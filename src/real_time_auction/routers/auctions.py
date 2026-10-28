@@ -1,3 +1,11 @@
+"""
+Auction & Bidding API Router
+----------------------------
+Handles HTTP endpoints for listing creation, browsing active auctions, 
+viewing auction details, and placing bids with atomic concurrency controls 
+and real-time WebSocket broadcasting.
+"""
+
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -28,17 +36,20 @@ from real_time_auction.models.user import User
 from real_time_auction.schemas.bid import BidCreate, BidResponse
 from real_time_auction.schemas.item import ItemDetailResponse, ItemListResponse
 
+# Initialize APIRouter with a common prefix and tag for API documentation grouping
 router = APIRouter(prefix="/api/v1/auctions", tags=["User Auctions & Bidding"])
 
+# Set up paths for template rendering and file uploads
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 UPLOAD_DIR = Path("static/uploads")
+# Ensure the upload directory exists on startup (parents=True creates nested dirs if needed)
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @router.get("/add", response_class=HTMLResponse)
 async def get_add_item_page(request: Request):
-    """Renders the HTML form to list a new auction item."""
+    """Renders the HTML form template used to list a new auction item."""
     return templates.TemplateResponse(request=request, name="add_item.html")
 
 
@@ -53,23 +64,26 @@ async def create_auction_item(
     image: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
 ):
-    """Handles form submission, processes image saving, and creates DB record."""
+    """
+    Handles multipart form submission for creating a new auction item.
+    Processes optional image uploads asynchronously and stores the item record in PostgreSQL.
+    """
     image_path = None
 
-    # Handle image upload non-blockingly
+    # Handle image upload non-blockingly if an image is provided
     if image and image.filename:
         file_ext = image.filename.split(".")[-1]
         unique_filename = f"{uuid.uuid4().hex}.{file_ext}"
         destination = UPLOAD_DIR / unique_filename
 
-        # Save file asynchronously
+        # Use aiofiles to perform non-blocking disk I/O operations
         async with aiofiles.open(destination, "wb") as buffer:
             content = await image.read()
             await buffer.write(content)
 
         image_path = f"/static/uploads/{unique_filename}"
 
-    # Parse ISO Datetime strings safely
+    # Safely parse incoming ISO 8601 datetime strings
     try:
         start_dt = datetime.fromisoformat(start_time)
         end_dt = datetime.fromisoformat(end_time)
@@ -79,12 +93,12 @@ async def create_auction_item(
             detail="Invalid datetime format provided.",
         )
 
-    # Create model instance
+    # Initialize the database model instance
     new_item = AuctionItem(
         title=title,
         description=description,
         starting_price=starting_price,
-        current_price=starting_price,
+        current_price=starting_price,  # Initial price starts at the baseline starting price
         reserve_price=reserve_price,
         start_time=start_dt,
         end_time=end_dt,
@@ -109,7 +123,10 @@ async def get_active_auctions(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Fetch active auction feed for mobile app catalog/dashboard."""
+    """
+    Retrieves a paginated list of active auction items for the catalog feed.
+    Requires user authentication via dependency injection.
+    """
     stmt = (
         select(AuctionItem)
         .where(AuctionItem.is_active == True)
@@ -128,7 +145,7 @@ async def get_auction_detail(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Fetch single product details along with its full ordered bid history stack."""
+    """Fetches detailed information for a specific auction item by ID."""
     stmt = select(AuctionItem).where(AuctionItem.id == item_id)
     result = await db.execute(stmt)
     item = result.scalar_one_or_none()
@@ -152,10 +169,16 @@ async def place_bid(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Place a bid on an auction item with row locking and real-time broadcast."""
+    """
+    Places a bid on an auction item. 
+    Implements row-level locking (`with_for_update`) to prevent race conditions 
+    during simultaneous high-frequency bidding, validates increments/deadlines, 
+    and broadcasts updates via WebSockets.
+    """
     now = datetime.now(timezone.utc)
 
-    # 1. Lock the auction item row asynchronously in PostgreSQL
+    # 1. Lock the auction item row asynchronously in PostgreSQL (SELECT ... FOR UPDATE)
+    # This prevents concurrent transactions from modifying or reading stale item prices.
     stmt = select(AuctionItem).where(AuctionItem.id == item_id).with_for_update()
     result = await db.execute(stmt)
     item = result.scalar_one_or_none()
@@ -166,8 +189,7 @@ async def place_bid(
             detail="Auction item not found",
         )
 
-    # 2. Check active status and expiration
-    # Ensure timezone awareness matching database timestamps
+    # 2. Check active status and expiration time with timezone safety checks
     end_time = item.end_time
     if end_time.tzinfo is None:
         end_time = end_time.replace(tzinfo=timezone.utc)
@@ -178,7 +200,7 @@ async def place_bid(
             detail="This auction has already ended.",
         )
 
-    # 3. Validate minimum bid increment
+    # 3. Validate that the bid meets the minimum required price increment
     min_required_bid = item.current_price + item.min_increment
     if bid_in.amount < min_required_bid:
         raise HTTPException(
@@ -186,7 +208,7 @@ async def place_bid(
             detail=f"Bid amount must be at least ${min_required_bid:.2f}",
         )
 
-    # 4. Create new bid record and update current price
+    # 4. Create the new bid record and update the current item price atomically
     new_bid = Bid(
         user_id=current_user.id,
         item_id=item.id,
@@ -199,7 +221,7 @@ async def place_bid(
     await db.refresh(new_bid)
     await db.refresh(item)
 
-    # 5. Broadcast update to all connected WebSocket clients viewing this item
+    # 5. Real-time broadcast: push the new bid to all WebSocket clients viewing this item room
     await ws_manager.broadcast_new_bid(
         item_id=item.id,
         bid_id=new_bid.id,

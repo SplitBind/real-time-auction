@@ -55,6 +55,36 @@ class ConnectManager:
             for client in disconnected_clients:
                 self.disconnect(client, item_id)
 
+    async def broadcast_auction_closed(
+            self,
+            item_id: int,
+            is_sold: bool,
+            winning_bid_id: int | None,
+            winning_user_id: int | None,
+            final_price: float
+            ):
+        """
+        Broadcast an AUCTION_CLOSED payload to all clients watching a specific item
+        """
+        if item_id in self.active_connections:
+            payload = json.dumps({
+                "event": "AUCTION_CLOSED",
+                "item_id": item_id,
+                "is_sold": is_sold,
+                "winning_bid_id": winning_bid_id,
+                "winning_user_id": winning_user_id,
+                "final_price": final_price
+                })
+            disconnected_clients = []
+            for connection in self.active_connections[item_id]:
+                try:
+                    await connection.send_text(payload)
+                except Exception:
+                    disconnected_clients.append(connection)
+
+            for client in disconnected_clients:
+                seld.disconnect(client, item_id)
+
 # Singleton instance shred across routers
 ws_manager = ConnectManager()
 

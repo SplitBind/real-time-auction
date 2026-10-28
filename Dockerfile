@@ -1,0 +1,22 @@
+# PYTHON SLIM IMAGE WITH UV PRE-INSTALLED
+FROM ghcr.io/astral-sh/uv:python3.12-slim-bookworm
+
+WORKDIR /app
+
+# ENABLE BYTECODE COMPILATION
+ENV UV_COMPILE_BYTECODE=1
+
+# COPY DEPENDENCY FILES FIRST FOR LAYER CACHING
+COPY pyproject.toml uv.lock ./
+
+# INSTALLING DEPENDENCY INTO THE ENVIROMENT
+RUN uv sync --frozon --no-dev --no-install-project
+
+# COPY THE ENTIRE PROJECT INTO THE CONTAINER
+COPY . .
+
+# EXPOSE FASTAPI PORT
+EXPOSE 8000
+
+# RUN UVICORN POINTING TO THE PACKAGE LAYOUT ENTRYPOINT INSIDE SRC/
+CMD ["uv","run","uvicorn","real_time_auction.main:app","--host","0.0.0.0","--port","8000"]

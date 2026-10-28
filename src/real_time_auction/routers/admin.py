@@ -1,3 +1,11 @@
+"""
+Sanctum Admin Portal router
+---------------------------
+
+Handles administrative workflows, including cookie-based authentication, 
+dashboard ledger reporting, auction lot creation, manual lot closure with
+race-condition protection, and serialized data feeds for administrative filtering.
+"""
 import uuid
 import json
 import aiofiles
@@ -12,7 +20,9 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select, func, or_, desc, asc
 from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
 
+from real_time_auction.config import settings
 from real_time_auction.core.deps import get_current_admin_user_html
 from real_time_auction.core.security import create_access_token, verify_password
 from real_time_auction.database import get_db
@@ -20,11 +30,13 @@ from real_time_auction.models.user import User
 from real_time_auction.models.item import AuctionItem
 from real_time_auction.models.bid import Bid
 from real_time_auction.core.websockets import ws_manager
+from real_time_auction.utils.upload import save_upload_file_securely
+from real_time_auction.tasks.email_tasks import send_dispatch_email_task
 
 router = APIRouter(prefix="/admin", tags=["Sanctum Admin Portal"])
 BASE_DIR = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
-UPLOAD_DIR = Path("static/uploads")
+UPLOAD_DIR = settings.UPLOAD_DIR
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 # --- AUTHENTICATION ENDPOINTS ---
@@ -41,7 +53,10 @@ async def admin_login_action(
     password: str = Form(...),
     db: AsyncSession = Depends(get_db),
 ):
-    """Validate admin credentials and set secure HTTP-only access cookie."""
+    """
+    Validates admin credentials (email/password), verifies administrator privileges, 
+    issues a JWT access token, and sets a secure HTTP-only access cookie.
+    """
     stmt = select(User).where(User.email == username)
     result = await db.execute(stmt)
     user = result.scalar_one_or_none()
@@ -83,9 +98,12 @@ async def admin_dashboard(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin_user_html),
 ):
-    """Sanctum Ledger & Control Portal"""
-    
-    # 1. Compute aggregate metrics
+    """
+    Sanctum Ledger & Control Portal Dashboard. 
+    Aggregates active item counts, total system bids, active lots, 
+    recent bidding activity, and verification queue statuses.
+    """
+    #Compute aggregate metrics
     total_active_res = await db.execute(
         select(func.count(AuctionItem.id)).where(AuctionItem.is_active == True)
     )
@@ -97,7 +115,7 @@ async def admin_dashboard(
     total_items_res = await db.execute(select(func.count(AuctionItem.id)))
     total_items = total_items_res.scalar() or 0
 
-    # 2. Query active lots
+    #  Query active lots
     active_stmt = (
         select(AuctionItem)
         .where(AuctionItem.is_active == True)
@@ -105,7 +123,7 @@ async def admin_dashboard(
     )
     active_items = (await db.execute(active_stmt)).scalars().all()
 
-    # 3. Query recent bids
+    #  Query recent bids
     bids_stmt = (
         select(Bid)
         .options(selectinload(Bid.user), selectinload(Bid.item))
@@ -114,7 +132,7 @@ async def admin_dashboard(
     )
     recent_bids = (await db.execute(bids_stmt)).scalars().all()
 
-    # 4. Query verification queue
+    #  Query verification queue
     now = datetime.now(timezone.utc)
     verification_stmt = (
         select(AuctionItem)
@@ -125,7 +143,7 @@ async def admin_dashboard(
     )
     verification_queue = (await db.execute(verification_stmt)).scalars().all()
 
-    # 5. Render dashboard template with defined variables
+    #  Render dashboard template with defined variables
     return templates.TemplateResponse(
         request=request,
         name="dashboard.html",
@@ -166,22 +184,14 @@ async def handle_add_item(
     image: Optional[UploadFile] = File(None),
     db: AsyncSession = Depends(get_db),
 ):
-    # 1. Initialize image URL variable
-    saved_image_url = None
+    """
+    Handles multipart form submission to create a new auction item using 
+    the modularized secure file upload utility.
+    """
+    # Process image upload securely
+    saved_image_url = await save_upload_file_securely(image, UPLOAD_DIR)
 
-    # 2. Process image upload if provided
-    if image and image.filename:
-        file_ext = image.filename.split(".")[-1]
-        unique_filename = f"{uuid.uuid4().hex}.{file_ext}"
-        destination = UPLOAD_DIR / unique_filename
-
-        async with aiofiles.open(destination, "wb") as buffer:
-            content = await image.read()
-            await buffer.write(content)
-
-        saved_image_url = f"/static/uploads/{unique_filename}"
-
-    # 3. Pass saved_image_url to the model
+    # Create and persist the new auction item model instance
     new_item = AuctionItem(
         title=title,
         description=description,
@@ -195,7 +205,15 @@ async def handle_add_item(
     )
 
     db.add(new_item)
-    await db.commit()
+
+    try:
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        raise HTTPException(
+                status_code = status.HTTP_400_BAD_REQUEST,
+                detail = "Failed to create auction item. A database constraint violation occured."
+                )
 
     return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -248,7 +266,25 @@ async def close_auction_lot(
     await db.commit()
     await db.refresh(item)
 
-    # 5. Broadcast auction status to WebSocket listeners
+    # 5. Trigger Email Dispatch Task via Celery if there is a valid winning user
+    if winning_bid and winning_bid.user and is_sold:
+        recipient_email = winning_bid.user.email
+        subject = f"[ACQUIRED] Lot #{item.id}: {item.title} — Ledger Sealed"
+
+        message = (
+            f"Operator,<br><br>"
+            f"The ledger for Lot #{item.id} — <strong>{item.title}</strong> is now sealed.<br>"
+            f"Your stake of <strong>${item.current_price:.2f}</strong> stands uncontested.<br><br>"
+            f"Access your secure portal to settle the ledger and initiate immediate transfer of acquisition."
+        )
+        
+        send_dispatch_email_task.delay(
+            recipient=recipient_email,
+            subject=subject,
+            message=message
+        )
+
+    # 6. Broadcast auction status to WebSocket listeners
     await ws_manager.broadcast_auction_closed(
         item_id=item.id,
         is_sold=is_sold,
@@ -256,9 +292,7 @@ async def close_auction_lot(
         winning_user_id=winning_bid.user_id if winning_bid else None,
         final_price=float(item.current_price),
     )
-    if not item.is_active:
-        return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
-
+    
     return RedirectResponse(url="/admin/dashboard", status_code=status.HTTP_303_SEE_OTHER)
 
 @router.get("/email", response_class=HTMLResponse)
