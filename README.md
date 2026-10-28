@@ -243,3 +243,43 @@ sudo systemctl restart fastapi-auction
 # Check Nginx error logs
 sudo tail -f /var/log/nginx/error.log
 ```
+---
+## Step 9: Configure SSH Key Authentication & Server Hardening'
+
+- Generate an SSH Key Pair(Local Machine)
+```bash
+ssh-keygen -t ed25519 -C "email address"
+```
+- Copy the Public to the server
+```bash
+ssh-copy-id -i ~/.ssh/id_ed25519 eye@server-ip-address
+```
+- Edit the SSH daemon
+```text
+PubkeyAuthentication yes
+PasswordAuthentication no
+PermitRootLogin prohibit-password
+X11Forwarding no
+MaxAuthTries 3
+```
+- Restart the service
+```bash
+sudo sshd -t
+sudo systemctl restart ssh
+```
+- SSH into the server over Tor (LOCAL MACHINE CONFIGURATION)
+```bash
+nano ~/.ssh/config
+```
+- Paste
+```bash
+Host realtime-auction-server-tor
+    HostName serveraddress.onion
+    User eye
+    Port 22
+    ProxyCommand nc -X 5 -x 127.0.0.1:9050 %h %p
+```
+- Connecting over Tor
+```bash
+ssh realtime-auction-server-tor
+```
