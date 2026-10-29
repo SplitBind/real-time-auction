@@ -283,3 +283,55 @@ Host realtime-auction-server-tor
 ```bash
 ssh realtime-auction-server-tor
 ```
+
+## Step 10:  Firewall configuration
+
+- Install UFW (Uncomplicated firewall)
+```bash
+sudo apt update
+sudo apt install -y ufw
+```
+- Default policies
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+```
+- Allow Required Ports
+```bash
+sudo ufw allow ssh
+sudo ufw allow 2222/tcp
+sudo ufw allow 80/tcp
+sudo ufw alloq 443/tcp
+```
+- Enable the Firewall
+```bash
+sudo ufw enable
+```
+- Verify UFW Status
+```bash
+sudo ufw status verbose
+```
+
+## Step 11: Proxy Settings
+- Install ProxyChains-NG
+```bash
+sudo apt update
+sudo apt install -y proxychains4
+```
+- Configure the proxies
+```bash
+sudo nano /etc/proxychains4.conf
+  [ProxyList]
+  socks5 ip-address
+  socks5 ip-address
+  socks5 ip-address
+```
+- Configure tor to Route Through Proxy Chain
+```bash
+sudo nano /etc/tor/torrc
+  Socks5Proxy 127.0.0.1:9050
+```
+- Restart tor
+```bash
+sudo systemctl restart tor
+```

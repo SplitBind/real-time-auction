@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Sanctum Admin Portal{% endblock %}</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <style>
         :root {
             --sanctum-bg: #0C0805;
@@ -236,6 +237,123 @@
             outline: none;
             border-color: var(--sanctum-gold);
         }
+        /* --- Flatpickr Dark Sanctum Theme Overrides --- */
+
+.flatpickr-calendar {
+    background: var(--sanctum-panel-bg, #140e09) !important;
+    border: 1px solid var(--sanctum-brass, #C5A059) !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8) !important;
+    color: var(--sanctum-parchment, #F3E5AB) !important;
+    font-family: inherit;
+    border-radius: 4px;
+}
+
+/* Header & Month/Year navigation */
+.flatpickr-months {
+    background: var(--sanctum-header-bg, #5A0D0D) !important;
+    border-top-left-radius: 3px;
+    border-top-right-radius: 3px;
+    padding: 6px;
+}
+
+.flatpickr-months .flatpickr-month {
+    background: transparent !important;
+    color: var(--sanctum-parchment, #F3E5AB) !important;
+    fill: var(--sanctum-parchment, #F3E5AB) !important;
+}
+
+.flatpickr-current-month .flatpickr-monthDropdown-months,
+.flatpickr-current-month input.cur-year {
+    color: var(--sanctum-gold, #E2B755) !important;
+    font-weight: bold;
+    background: transparent !important;
+}
+
+.flatpickr-months .flatpickr-prev-month, 
+.flatpickr-months .flatpickr-next-month {
+    color: var(--sanctum-parchment, #F3E5AB) !important;
+    fill: var(--sanctum-parchment, #F3E5AB) !important;
+}
+
+.flatpickr-months .flatpickr-prev-month:hover svg, 
+.flatpickr-months .flatpickr-next-month:hover svg {
+    fill: var(--sanctum-gold, #E2B755) !important;
+}
+
+/* Weekday labels */
+.flatpickr-weekdays {
+    background: var(--sanctum-panel-bg, #140e09) !important;
+}
+
+span.flatpickr-weekday {
+    color: var(--sanctum-muted, #A08A75) !important;
+    font-weight: 600;
+}
+
+/* Days Grid */
+.flatpickr-day {
+    color: var(--sanctum-parchment, #F3E5AB) !important;
+    border-radius: 3px !important;
+}
+.flatpickr-day.flatpickr-disabled, 
+.flatpickr-day.flatpickr-disabled:hover {
+    color: rgba(160, 138, 117, 0.3) !important;
+}
+
+.flatpickr-day:hover, 
+.flatpickr-day.prevMonthDay:hover, 
+.flatpickr-day.nextMonthDay:hover {
+    background: rgba(197, 160, 89, 0.2) !important;
+    border-color: var(--sanctum-brass, #C5A059) !important;
+}
+
+/* Selected Date */
+.flatpickr-day.selected, 
+.flatpickr-day.selected:hover {
+    background: var(--sanctum-gold, #E2B755) !important;
+    color: var(--sanctum-bg, #0C0805) !important;
+    border-color: var(--sanctum-gold, #E2B755) !important;
+    font-weight: bold;
+}
+
+/* Today's outline */
+.flatpickr-day.today {
+    border-color: var(--sanctum-brass, #C5A059) !important;
+}
+
+.flatpickr-day.today:hover {
+    background: var(--sanctum-brass, #C5A059) !important;
+    color: var(--sanctum-bg, #0C0805) !important;
+}
+
+/* Time Picker Section */
+.flatpickr-time {
+    background: var(--sanctum-panel-bg, #140e09) !important;
+    border-top: 1px solid rgba(197, 160, 89, 0.2) !important;
+    color: var(--sanctum-parchment, #F3E5AB) !important;
+}
+
+.flatpickr-time input {
+    color: var(--sanctum-gold, #E2B755) !important;
+    font-weight: bold;
+}
+
+.flatpickr-time .flatpickr-time-separator,
+.flatpickr-time .flatpickr-am-pm {
+    color: var(--sanctum-parchment, #F3E5AB) !important;
+}
+
+.flatpickr-time input:hover, 
+.flatpickr-time .flatpickr-am-pm:hover {
+    background: rgba(197, 160, 89, 0.1) !important;
+}
+
+/* Arrows for time spinner */
+.flatpickr-time input[type="number"]::-webkit-inner-spin-button,
+.flatpickr-time input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
     </style>
 </head>
 <body>

@@ -9,7 +9,7 @@ race-condition protection, and serialized data feeds for administrative filterin
 import uuid
 import json
 import aiofiles
-from typing import Optional
+from typing import Optional, List
 from decimal import Decimal
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,20 +18,23 @@ from fastapi import APIRouter,HTTPException ,Depends, File,Form, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select, func, or_, desc, asc
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, Session
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
 from real_time_auction.config import settings
-from real_time_auction.core.deps import get_current_admin_user_html
+from real_time_auction.core.deps import get_current_admin_user_html, get_current_admin_user
 from real_time_auction.core.security import create_access_token, verify_password
 from real_time_auction.database import get_db
 from real_time_auction.models.user import User
 from real_time_auction.models.item import AuctionItem
 from real_time_auction.models.bid import Bid
 from real_time_auction.core.websockets import ws_manager
+from real_time_auction.models.wallet import TransactionWallet
 from real_time_auction.utils.upload import save_upload_file_securely
 from real_time_auction.tasks.email_tasks import send_dispatch_email_task
+from real_time_auction.schemas.wallet import AdminWalletMonitorResponse
+from real_time_auction.services.monero_service import get_subaddress_balance
 
 router = APIRouter(prefix="/admin", tags=["Sanctum Admin Portal"])
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -331,4 +334,24 @@ async def list_admin_auctions(request: Request, db: AsyncSession = Depends(get_d
             "total_count": len(raw_auctions),
         }
     )
+
+
+@router.get("/wallets/monitor", response_model=List[AdminWalletMonitorResponse])
+async def admin_monitor_wallets(
+        db: Session = Depends(get_db),
+        admin_user: User = Depends(get_current_admin_user)
+):
+    wallets = db.query(TransactionWallet).all()
+
+    # Optional live balance sync check
+    for w in wallets:
+        live_balance = await get_subaddress_balance(w.address_index)
+        if live_balance != float(w.received_amount_xmr):
+            w.received_amount_xmr = live_balance
+            if live_balance >= float(w.expected_amount_xmr):
+                w.is_paid = True
+            db.commit()
+            db.refresh(w)
+
+    return wallets
 
